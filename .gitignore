@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.so
+
+# Local datasets and training outputs
+data/
+processed_data/
+checkpoints/
+act_ckpt/
+artifact_outputs/
+teacher_visualizations/
+*.hdf5
+*.ckpt
+*.pth
+*.pt
+
+# Generated visualizations and local IDE files
+heatmap_outputs/
+.idea/
+.vscode/

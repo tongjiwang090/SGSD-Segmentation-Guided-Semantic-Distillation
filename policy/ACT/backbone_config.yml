@@ -1,0 +1,26 @@
+# Shared ACT vision backbone config.
+# Edit this file to switch the default backbone used by both training and deployment.
+#
+# Supported backbone_type values:
+# - resnet
+# - vit
+# - dinov2
+# - clip
+#
+# Typical backbone values:
+# - resnet:  resnet18, resnet34, resnet50, resnet101
+# - vit:     vit_base_patch16_224
+# - dinov2:  vit_base_patch14_dinov2
+# - clip:    vit_base_patch16_clip_224
+
+backbone_type: resnet
+backbone: resnet18
+backbone_pretrained: true
+
+# Optional input resize before the backbone.
+# Set to null to use the model default resolution.
+# Examples: 224, 336, 518
+backbone_image_size: null
+
+# UNet Distillation Feature
+use_distillation: false

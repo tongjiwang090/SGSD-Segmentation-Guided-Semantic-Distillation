@@ -1,0 +1,8 @@
+{
+    "sim-beat_block_hammer-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-beat_block_hammer/demo_clean-50",
+        "num_episodes": 116,
+        "episode_len": 116,
+        "camera_names": ["cam_high", "cam_right_wrist", "cam_left_wrist"]
+    }
+}
