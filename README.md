@@ -283,17 +283,7 @@ cp -r /path/to/SGSD/sgsd .
 
 ## Citation
 
-If you use this code, please cite the repository and the accompanying paper. The paper is
-currently under double-blind review; author metadata is therefore intentionally omitted.
-
-```bibtex
-@article{sgsd2026,
-  title   = {Segmentation-Guided Semantic Distillation for Robot Manipulation},
-  author  = {Anonymous authors},
-  journal = {Under review at ICLR 2027},
-  year    = {2026},
-  url     = {https://github.com/tongjiwang090/SGSD-Segmentation-Guided-Semantic-Distillation}
-}
+If you use this code, please cite the repository and the accompanying paper.
 ```
 
 This project builds on RoboTwin:
