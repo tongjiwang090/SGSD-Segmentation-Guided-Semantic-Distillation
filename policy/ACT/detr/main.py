@@ -153,7 +153,7 @@ def get_args_parser():
 def build_ACT_model_and_optimizer(args_override, RoboTwin_Config=None):
     if RoboTwin_Config is None:
         parser = argparse.ArgumentParser("DETR training and evaluation script", parents=[get_args_parser()])
-        # English,English
+        # parse from defaults, not argv
         args, _ = parser.parse_known_args()
         for k, v in args_override.items():
             setattr(args, k, v)
@@ -182,7 +182,7 @@ def build_ACT_model_and_optimizer(args_override, RoboTwin_Config=None):
 
 def build_CNNMLP_model_and_optimizer(args_override):
     parser = argparse.ArgumentParser("DETR training and evaluation script", parents=[get_args_parser()])
-    # English,English
+    # parse from defaults, not argv
     args, _ = parser.parse_known_args()
 
     for k, v in args_override.items():

@@ -1,59 +1,113 @@
 # Segmentation-Guided Semantic Distillation (SGSD)
 
-This repository contains the segmentation teacher and the modified ACT policy used by **Segmentation-Guided Semantic Distillation for Robot Manipulation**. SGSD trains a task-specific U-Net on RoboTwin actor-segmentation labels and distills its dense spatial features into the ACT visual backbone during policy fine-tuning.
+This repository contains the segmentation teacher and the modified ACT and Diffusion
+Policy implementations used by **Segmentation-Guided Semantic Distillation for Robot
+Manipulation**. SGSD trains a task-specific U-Net on RoboTwin actor-segmentation labels
+and distills its dense spatial features directly into the policy's visual backbone
+during fine-tuning.
 
-The code is designed to be used inside [RoboTwin](https://github.com/TianxingChen/RoboTwin), with the files under `policy/ACT` replacing RoboTwin's ACT implementation. The repository intentionally does not include RoboTwin, datasets, checkpoints, or generated visualizations.
+The code is designed to be used inside
+[RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin) as an overlay: every path here
+mirrors a RoboTwin path, so the files can be copied over without editing imports. The
+repository intentionally does not include RoboTwin, datasets, checkpoints, or generated
+visualizations, and it ships only the files this work modified — unmodified upstream
+files come from RoboTwin itself.
 
 ## Method
 
 The training pipeline has two stages:
 
-1. `segmentation/` trains an attention-gated residual U-Net on RGB frames and actor-segmentation masks stored in RoboTwin HDF5 episodes. The intermediate `up4` feature map is the teacher representation.
-2. `policy/ACT/` trains ACT with the normal action and KL objectives plus a dense feature distillation loss. ACT features are projected to 64 channels, resized to the U-Net `up4` resolution, and compared with one teacher feature map per camera.
+1. `Segmentation/` trains an attention-gated residual U-Net on RGB frames and
+   actor-segmentation masks stored in RoboTwin HDF5 episodes. The intermediate `up4`
+   feature map is the teacher representation.
+2. `policy/ACT/` trains ACT with the usual action and KL objectives plus a dense feature
+   distillation loss on the visual backbone.
 
-The implementation supports cosine, MSE, focal, spatially weighted, anti-artifact, and magnitude-aware distillation losses. The default loss is `focal_cosine`; choose another loss with `--distill_loss_type`.
+Teacher and student both carry 768 channels, so alignment is spatial only: the student's
+patch grid is bilinearly upsampled to the teacher's `224x224`. **There is no learned
+projection on either side**, and the teacher is discarded at inference, leaving the
+deployed architecture unchanged.
+
+Three terms are optimised jointly with the policy objective:
+
+```
+L = L_policy + lambda_D * ( L_feat + 0.5 * L_dir + 0.5 * L_mag )
+
+L_feat   mean squared error between corresponding feature vectors
+L_dir    1 - cosine similarity, scale-invariant
+L_mag    squared difference of feature norms
+```
+
+These coefficients are nominal. In the reported run the realised loss mass at the final
+epoch was roughly 3% / 4% / 93%, so the magnitude term dominates the scalar objective —
+which does not by itself establish its share of the gradient.
+
+Supervision is applied to the **pre-LayerNorm** output of the final block while the
+policy reads the **post-LayerNorm** features. These are distinct measurement points:
+LayerNorm removes per-token scale, so a norm map at the supervised site is not preserved
+at the policy input.
+
+`imitate_episodes.py` also retains a number of earlier distillation objectives
+(`focal_cosine`, `anti_artifact`, the `attention_mse_*` family). The paper uses
+`structure_diversity`, which is the default throughout this repository.
 
 ## Repository layout
 
 ```text
-segmentation/
-  dataset.py       HDF5 dataset and train/validation split
-  unet.py          Attention-gated residual U-Net
-  train.py         Teacher training entry point
-  evaluate.py      Single-image and episode inference
-  extract_data.py  Extract RGB and actor masks from raw episodes
+sgsd/
+  train_teacher.py     teacher training entry point
+  train_policy.py      policy training entry point, one flag per arm
+  evaluate.py          closed-loop evaluation of a checkpoint
+
+Segmentation/
+  dataset.py           HDF5 dataset, train/validation split, mask conventions
+  unet.py              attention-gated residual U-Net, up4 emits 768 channels
+  train.py             teacher training
+  evaluate.py          single-image and episode inference
+  extract_data.py      export RGB and actor masks from raw episodes
 
 policy/ACT/
-  imitate_episodes.py  ACT training and validation
-  act_policy.py        ACT policy wrapper used by RoboTwin
-  deploy_policy.py     RoboTwin deployment adapter
-  process_data.py      Convert raw RoboTwin episodes to ACT HDF5
-  detr/                ACT VAE, transformer, and visual backbones
-  backbone_config.yml  Shared backbone defaults
-  train.sh / eval.sh   RoboTwin-compatible shell entry points
+  imitate_episodes.py  distillation losses, teacher loading, training loop
+  act_policy.py        ACT policy wrapper, auxiliary distillation projection removed
+  constants.py         task definitions, read from SIM_TASK_CONFIGS.json
+  utils.py             episode dataset, carries ground-truth segmentation
+  detr/models/backbone.py  mount point and trainable-visual-set selection
+  detr/main.py         adds --backbone_type and --backbone_image_size
+  run_distill_arm.sh   distilled arm
+  run_freeze_ablation.sh   frozen and action-only arms
+  run_eval_arm.sh      evaluation
+
+policy/DP/diffusion_policy/
+  model/vision/dp_distill.py   the same objective for Diffusion Policy
+  model/vision/dp_vit.py       vit visual head replacing the random resnet18
+  workspace/robotworkspace.py  wires the loss into DP training
+  config/robot_dp_vit_14.yaml  config for the vit-backbone DP runs
 ```
 
 ## Requirements
 
-Use the RoboTwin environment, or create an equivalent Python 3.9 environment from `policy/ACT/conda_env.yaml`. A CUDA-enabled PyTorch installation is recommended for both stages. The ACT backbone code additionally requires `timm` and the pretrained weights for the selected backbone.
+Use the RoboTwin environment. `requirements.txt` lists only what this method adds on top
+of it; RoboTwin's own dependencies are not duplicated.
 
 ```bash
-conda env create -f policy/ACT/conda_env.yaml
-conda activate aloha
-pip install timm
+pip install -r requirements.txt
 ```
 
-Run all commands below from the repository root unless a command explicitly changes directory.
+Verified on Python 3.10, CUDA 12.1, torch 2.4.1+cu121, RTX 4090 (sm_89).
+
+Run all commands below from the RoboTwin root unless a command explicitly changes
+directory.
 
 ## Prepare RoboTwin data
 
-First collect RoboTwin demonstrations with the normal RoboTwin workflow. For example:
+Collect demonstrations with the normal RoboTwin workflow:
 
 ```bash
 bash collect_data.sh beat_block_hammer demo_clean 0
 ```
 
-Convert the raw episodes into the ACT format. The converter also updates `policy/ACT/SIM_TASK_CONFIGS.json`.
+Convert the raw episodes into the ACT format. The converter also updates
+`policy/ACT/SIM_TASK_CONFIGS.json`.
 
 ```bash
 cd policy/ACT
@@ -61,38 +115,48 @@ bash process_data.sh beat_block_hammer demo_clean 50
 cd ../..
 ```
 
-The converted files are written to `policy/ACT/processed_data/sim-beat_block_hammer/demo_clean-50/`. Each episode contains RGB images under `observations/images` and segmentation masks under `observations/segmentation`.
+The converted files are written to
+`policy/ACT/processed_data/sim-beat_block_hammer/demo_clean-50/`. Each episode contains
+RGB images under `observations/images` and segmentation masks under
+`observations/segmentation`.
 
 ## Train the segmentation teacher
 
-Train the U-Net using the converted ACT episodes. The default split uses 80% of the episodes for training and the remainder for validation.
+Train one teacher per task. Using a shared output directory overwrites the previous
+teacher.
 
 ```bash
-cd segmentation
-python train.py \
-  --data_dir ../policy/ACT/processed_data/sim-beat_block_hammer/demo_clean-50 \
-  --epochs 20 \
-  --batch_size 12 \
-  --lr 1e-3
+python -m sgsd.train_teacher \
+    --data-dir policy/ACT/processed_data/sim-beat_block_hammer/demo_clean-50 \
+    --save-dir Segmentation/checkpoints_beat_block_hammer
 ```
 
-The best checkpoint is saved as `segmentation/checkpoints/best_unet_model.pth`. To resume, pass `--resume path/to/checkpoint.pth`; pass an empty or nonexistent path when starting from scratch.
+The best checkpoint is saved as `<save-dir>/best_unet_model.pth`. The default split uses
+80% of the episodes for training and the remainder for validation.
 
-For raw RoboTwin episodes, `extract_data.py` exports RGB and actor masks to per-camera PNG folders:
+By default the teacher's foreground is every non-background pixel. To supervise only the
+manipulated objects, pass their simulator actor ids:
 
 ```bash
-cd segmentation
-python extract_data.py
+python -m sgsd.train_teacher --data-dir <...> --save-dir <...> \
+    --mask-mode target --target-ids 178,184
 ```
+
+Actor ids are scene-assembly ordinals, not object identities. They differ per task and
+must be read from `observations/segmentation` rather than assumed.
+
+For raw RoboTwin episodes, `Segmentation/extract_data.py` exports RGB and actor masks to
+per-camera PNG folders.
 
 ## Run segmentation inference
 
-Evaluate one image and save a visualization containing the original image, prediction, and overlay:
+Evaluate one image and save a visualization containing the original image, prediction,
+and overlay:
 
 ```bash
-cd segmentation
+cd Segmentation
 python evaluate.py \
-  --model checkpoints/best_unet_model.pth \
+  --model checkpoints_beat_block_hammer/best_unet_model.pth \
   --image /path/to/frame.png \
   --save_path results/frame_prediction.png
 ```
@@ -101,73 +165,147 @@ To inspect an extracted episode, provide its directory instead of `--image`:
 
 ```bash
 python evaluate.py \
-  --model checkpoints/best_unet_model.pth \
+  --model checkpoints_beat_block_hammer/best_unet_model.pth \
   --test_data /path/to/extracted_all_episodes/episode0
 ```
 
-The teacher always resizes RGB inputs to `224x224` and applies ImageNet normalization. The same preprocessing is applied inside the ACT distillation loop.
+The teacher always resizes RGB inputs to `224x224` and applies ImageNet normalization.
+The same preprocessing is applied inside the distillation loop.
 
 ## Train ACT with SGSD
 
-Make sure `segmentation/checkpoints/best_unet_model.pth` exists before enabling distillation. From `policy/ACT`, run:
+```bash
+python -m sgsd.train_policy --arm sgsd --task beat_block_hammer \
+    --teacher-ckpt Segmentation/checkpoints_beat_block_hammer/best_unet_model.pth
+```
+
+Baselines use the same command with a different arm:
 
 ```bash
-cd policy/ACT
-bash train.sh \
-  beat_block_hammer demo_clean 50 0 0 \
-  dinov2 vit_base_patch14_dinov2 true 224 true false
+python -m sgsd.train_policy --arm frozen      --task beat_block_hammer
+python -m sgsd.train_policy --arm action-only --task beat_block_hammer
 ```
 
-The positional arguments are:
+| `--arm` | Trainable visual parameters | Teacher |
+|---|---|---|
+| `sgsd` | `b11`, CLS token, final LayerNorm | yes |
+| `action-only` | same set | no |
+| `frozen` | none | no |
 
-```text
-task_name task_config expert_data_num seed gpu_id
-[backbone_type] [backbone] [backbone_pretrained] [backbone_image_size]
-[use_distillation] [freeze_last_layer_and_cls] [resume_ckpt]
+The paper configuration is the default: 4,000 epochs, batch size 4, learning rate `1e-5`
+for both backbone and policy, supervision mounted on `b11`. Add `--print-only` to resolve
+and print the configuration without training.
+
+Checkpoints and logs are written to `policy/ACT/act_ckpt/<task>_<arm>_seed<seed>/`.
+
+Ablations:
+
+```bash
+--loss structure_diversity_nomag    # drop the magnitude term
+--loss structure_diversity_nocos    # drop the direction term
+--loss structure_diversity_mseonly  # feature MSE only
+--mount-block 8 --unfreeze b8       # supervise b8 instead of b11
+--mount-block -1                    # supervise the post-LayerNorm output
+--shuffle-teacher space|batch       # teacher-correspondence controls
+--backbone-type vit|clip            # supervised ViT-B/16 or CLIP ViT-B/16
 ```
 
-The command writes checkpoints and logs to `policy/ACT/act_ckpt/act-<task_name>/<task_config>-<expert_data_num>/`. The default backbone configuration is in `policy/ACT/backbone_config.yml`; command-line values override that file. Supported backbone families are `resnet`, `vit`, `dinov2`, and `clip`.
+Moving the mount point requires moving `--unfreeze` with it. The supervised block must
+be trainable or no gradient reaches the loss, and the run completes without ever
+optimizing the distillation objective. Every mount-point run reported in the paper
+pairs the two, down to the two-point variant (`--mount-block 5 11 --unfreeze b5,b11`).
 
-Useful distillation options accepted by `imitate_episodes.py` include:
-
-```text
---distill_loss_type focal_cosine
---distill_focal_gamma 2.0
---distill_weight 10.0
---teacher_vis_interval 500   # set to 0 to disable teacher visualizations
-```
-
-If the teacher checkpoint is missing, the current code creates a randomly initialized teacher for smoke testing and prints a warning. Do not use that fallback for an actual experiment.
+If the teacher checkpoint is missing, the training code builds a randomly initialized
+teacher and prints a warning. That path exists for smoke testing only; do not use it for
+an actual experiment.
 
 ## ACT inference and RoboTwin deployment
 
-Evaluate a trained policy through RoboTwin's standard evaluation entry point:
-
 ```bash
-cd policy/ACT
-bash eval.sh \
-  beat_block_hammer demo_clean demo_clean 50 0 0 \
-  dinov2 vit_base_patch14_dinov2 true 224 true true auto
+python -m sgsd.evaluate --name bbh-sgsd \
+    --ckpt-dir policy/ACT/act_ckpt/beat_block_hammer_sgsd_seed0
 ```
 
-`eval.sh` changes to the RoboTwin root and invokes `script/eval_policy.py`. The deployment adapter in `policy/ACT/deploy_policy.py` converts RoboTwin observations (`head_camera`, `left_camera`, `right_camera`, and joint state) into ACT tensors and denormalizes predicted actions.
+This wraps `policy/ACT/run_eval_arm.sh`, which changes to the RoboTwin root and invokes
+`script/eval_policy.py`. The deployment adapter in `policy/ACT/deploy_policy.py` converts
+RoboTwin observations into ACT tensors and denormalizes predicted actions.
+
+`--task-config` must match the configuration the policy was trained on. A policy trained
+on `demo_clean` and evaluated under `demo_distractor` measures something else.
+
+## Checkpoints
+
+Not included in this repository. Each released checkpoint directory holds
+`policy_epoch_4000_seed_0.ckpt` and the `run_config.json` it was trained with; the
+`task_name` field in that file records the training configuration.
+
+```bash
+# continue training from, or fine-tune, a released checkpoint
+python -m sgsd.train_policy --arm sgsd --task beat_block_hammer \
+    --teacher-ckpt <teacher.pth> \
+    --resume-ckpt <dir>/policy_epoch_4000_seed_0.ckpt
+
+# evaluate one directly
+python -m sgsd.evaluate --name bbh-sgsd --ckpt-dir <dir> \
+    --ckpt-name policy_epoch_4000_seed_0.ckpt
+```
+
+## Train Diffusion Policy with SGSD
+
+```bash
+cd policy/DP
+bash process_data.sh beat_block_hammer demo_clean 50
+bash train.sh beat_block_hammer demo_clean 50 0 14 0
+```
+
+Distillation is off by default and is enabled from the command line with
+`distill.enabled=true`; see `config/robot_dp_vit_14.yaml` for the mount point, sample
+count and weight. DP draws a random subset of images per step for the distillation loss
+because the full batch does not fit in memory — a known difference from the ACT side.
 
 ## Embed SGSD into RoboTwin
 
-Use a RoboTwin checkout with the same data and API version as the one used to collect demonstrations.
+Use a RoboTwin checkout with the same data and API version used to collect the
+demonstrations.
 
-1. Copy this repository's `segmentation/` directory to the RoboTwin root.
-2. Replace RoboTwin's `policy/ACT/` directory with this repository's `policy/ACT/` directory, keeping any locally generated `act_ckpt/` or `processed_data/` outside version control.
-3. Install the dependencies and run `pip install -e policy/ACT/detr` if the environment does not already resolve the local `detr` package.
-4. Train the teacher at `segmentation/checkpoints/best_unet_model.pth`.
-5. Run `policy/ACT/process_data.sh` and then `policy/ACT/train.sh` with `use_distillation=true`.
-6. Use `policy/ACT/eval.sh` or RoboTwin's normal deployment command for inference.
+```bash
+git clone https://github.com/RoboTwin-Platform/RoboTwin.git
+cd RoboTwin && bash script/_install.sh
 
-The modified ACT model creates `DETRVAE.distill_proj` only when `use_distillation` is enabled. It maps the selected visual backbone's channels to the 64-channel U-Net `up4` representation, so the replacement is self-contained and does not require changes to RoboTwin's evaluation script.
+cp -r /path/to/SGSD/{Segmentation,policy,task_config,envs} .
+cp -r /path/to/SGSD/sgsd .
+```
+
+Paths are identical to RoboTwin's, so no import needs editing. Files replaced by the
+overlay, and what each one changes:
+
+| Path | Change |
+|---|---|
+| `Segmentation/` | the teacher; written for this work |
+| `policy/ACT/imitate_episodes.py` | the three distillation terms, teacher loading, the forward hook exposing the supervised block |
+| `policy/ACT/detr/models/backbone.py` | trainable-visual-set selector, timm ViT backbones, optional readout pooling |
+| `policy/ACT/detr/main.py` | adds `--backbone_type` and `--backbone_image_size` |
+| `policy/ACT/act_policy.py` | removes the auxiliary learned distillation projection |
+| `policy/ACT/constants.py`, `utils.py` | task definitions from JSON; segmentation carried through the episode pipeline |
+| `policy/DP/diffusion_policy/` | the same objective for Diffusion Policy |
+| `envs/camera/camera.py` | records per-actor and per-mesh segmentation alongside RGB |
+
+Two environment switches matter and fail silently if lost:
+
+- **`ACT_TASK_CFG`** (`mt_arms.sh`, `run_distill_arm.sh`, `run_freeze_ablation.sh`).
+  Without it the scripts fall back to `demo_clean`, so a non-clean experiment trains and
+  evaluates on clean data and reports plausible but wrong numbers.
+- **`TEACHER_SEG_MODE`** (`Segmentation/dataset.py`) selects the mask convention
+  (`all` / `target`). Unset, behaviour is pixel-identical to the original.
+
+`dataset.py` also fixes an ordering defect in the original: the mask was cast with
+`astype(np.uint8)` before resizing, so actor ids above 255 wrapped (260 selected an
+unrelated actor, 256 dropped out of the foreground). It now binarizes first.
 
 ## Citation
 
-If you use this code, please cite the repository and the accompanying paper. The paper is currently under double-blind review; author metadata is therefore intentionally omitted.
+If you use this code, please cite the repository and the accompanying paper. The paper is
+currently under double-blind review; author metadata is therefore intentionally omitted.
 
 ```bibtex
 @article{sgsd2026,
@@ -190,8 +328,11 @@ This project builds on RoboTwin:
 }
 ```
 
-Please also cite the original ACT implementation and follow the licenses of RoboTwin, ACT, DETR, and their dependencies when redistributing this code.
+Please also cite the original ACT and Diffusion Policy implementations, and follow the
+licenses of RoboTwin, ACT, DETR, and their dependencies when redistributing this code.
 
 ## License
 
-The repository follows the MIT license included in the upstream project. Third-party components under `policy/ACT/detr/` retain their original notices.
+Apache License 2.0; see `LICENSE`. `NOTICE` lists the upstream projects each modified
+file derives from and the scope of every change. Files under `policy/ACT/detr/` retain
+Facebook's original copyright notices.

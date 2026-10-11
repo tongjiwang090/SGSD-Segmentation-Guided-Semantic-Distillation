@@ -1,0 +1,166 @@
+# ============================================================================
+# dp with a pretrained vit visual head
+#
+# every change relative to robot_dp_14.yaml has a reason:
+#   rgb_model      get_resnet (randomly initialized resnet18) -> get_vit (pretrained dinov2)
+#                  this is the head swap itself
+#   resize_shape   null -> [224,224]
+#                  vit is patch14 and 240x320 is not divisible; 224 also matches the
+#                  act side, and the teacher takes 224, so all three agree
+#   use_group_norm True -> False
+#                  that was for resnet's batchnorm; vit uses layernorm, so it is moot
+#   batch_size     128 -> 32
+#                  measured memory limit: n_img = batch x n_obs_steps(3),
+#                  96 images peak at 29.2GB, 384 images oom (>44GB).
+#                  frozen and distilled arms both use 32 so the only difference
+#                  between them is the distillation itself.
+#                  checkpoints kept dense after two accidental instance restarts
+# ============================================================================
+defaults:
+  - _self_
+  - task: default_task_14
+
+name: robot_${task.name}
+_target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
+
+task_name: ${task.name}
+shape_meta: ${task.shape_meta}
+exp_name: "dp_vit"
+
+horizon: 8
+n_obs_steps: 3
+n_action_steps: 6
+n_latency_steps: 0
+dataset_obs_steps: ${n_obs_steps}
+past_action_visible: False
+keypoint_visible_rate: 1.0
+obs_as_global_cond: True
+
+# ---- distillation switch (added by this work; unset or enabled=false matches upstream) ----
+distill:
+  enabled: false          # turned on from the command line with distill.enabled=true
+  mount_block: 11         # same as the act side
+  n_sample: 16            # images drawn per step from batch x T for the loss (memory bound)
+  w_mse: 1.0
+  w_cos: 0.5
+  w_mag: 0.5
+  weight: 1.0             # coefficient on the distillation loss, matching act's distill_weight
+
+policy:
+  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy
+  shape_meta: ${shape_meta}
+
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_start: 0.0001
+    beta_end: 0.02
+    beta_schedule: squaredcos_cap_v2
+    variance_type: fixed_small
+    clip_sample: True
+    prediction_type: epsilon
+
+  obs_encoder:
+    _target_: diffusion_policy.model.vision.multi_image_obs_encoder.MultiImageObsEncoder
+    shape_meta: ${shape_meta}
+    rgb_model:
+      _target_: diffusion_policy.model.vision.dp_vit.get_vit
+      name: vit_base_patch14_dinov2.lvd142m
+      unfreeze: none        # frozen arm uses none; distilled arm overrides to b11,cls,norm
+      pool: mean
+    resize_shape: [224, 224]
+    crop_shape: null
+    random_crop: True
+    use_group_norm: False
+    share_rgb_model: False
+    imagenet_norm: True
+
+  horizon: ${horizon}
+  n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
+  n_obs_steps: ${n_obs_steps}
+  num_inference_steps: 100
+  obs_as_global_cond: ${obs_as_global_cond}
+  diffusion_step_embed_dim: 128
+  down_dims: [256, 512, 1024]
+  kernel_size: 5
+  n_groups: 8
+  cond_predict_scale: True
+
+ema:
+  _target_: diffusion_policy.model.diffusion.ema_model.EMAModel
+  update_after_step: 0
+  inv_gamma: 1.0
+  power: 0.75
+  min_value: 0.0
+  max_value: 0.9999
+
+dataloader:
+  batch_size: 32
+  num_workers: 0
+  shuffle: True
+  pin_memory: True
+  persistent_workers: False
+
+val_dataloader:
+  batch_size: 32
+  num_workers: 0
+  shuffle: False
+  pin_memory: True
+  persistent_workers: False
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4
+  betas: [0.95, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-6
+
+training:
+  device: "cuda:0"
+  seed: 42
+  debug: False
+  resume: True
+  lr_scheduler: cosine
+  lr_warmup_steps: 500
+  num_epochs: 600
+  gradient_accumulate_every: 1
+  use_ema: True
+  freeze_encoder: False
+  rollout_every: 50
+  checkpoint_every: 200
+  val_every: 1
+  sample_every: 5
+  max_train_steps: null
+  max_val_steps: null
+  tqdm_interval_sec: 1.0
+
+logging:
+  project: dp_vit
+  resume: True
+  mode: offline
+  name: ${exp_name}
+  tags: ["dp", "vit", "distill"]
+  id: null
+  group: null
+
+checkpoint:
+  topk:
+    monitor_key: train_loss
+    mode: min
+    k: 1
+    format_str: 'epoch={epoch:04d}-train_loss={train_loss:.4f}.ckpt'
+  save_last_ckpt: True
+  save_last_snapshot: False
+
+multi_run:
+  run_dir: data/outputs/${exp_name}
+  wandb_name_base: ${exp_name}
+
+hydra:
+  job:
+    override_dirname: ${name}
+  run:
+    dir: data/outputs/${exp_name}
+  sweep:
+    dir: data/outputs/${exp_name}
+    subdir: ${hydra.job.num}

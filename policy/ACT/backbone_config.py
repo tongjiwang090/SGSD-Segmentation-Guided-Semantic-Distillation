@@ -10,7 +10,6 @@ BACKBONE_CONFIG_KEYS = (
     "backbone",
     "backbone_pretrained",
     "backbone_image_size",
-    "use_distillation",
 )
 
 

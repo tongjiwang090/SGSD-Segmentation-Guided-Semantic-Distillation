@@ -51,10 +51,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 action_len = episode_len - max(0, start_ts - 1)  # hack, to make timesteps more aligned
 
         self.is_sim = is_sim
-        padded_action = np.zeros((self.max_action_len, action.shape[1]), dtype=np.float32)  # Englishmax_action_lenEnglish
+        padded_action = np.zeros((self.max_action_len, action.shape[1]), dtype=np.float32)  # sized by max_action_len
         padded_action[:action_len] = action
-        is_pad = np.ones(self.max_action_len, dtype=bool)  # English1(True)
-        is_pad[:action_len] = 0  # Englishaction_lenEnglish0(False),English
+        is_pad = np.ones(self.max_action_len, dtype=bool)  # all ones (True)
+        is_pad[:action_len] = 0  # first action_len positions are real, not padding
 
         # new axis for different cameras
         all_cam_images = []
@@ -150,21 +150,33 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     # construct dataset and dataloader
     train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_action_len)
     val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, max_action_len)
+
+    # was num_workers=1, prefetch_factor=1, no persistent_workers -> workers were rebuilt
+    # by fork every epoch and a single worker could not saturate the gpu (measured 56-75%
+    # util, s/it swinging 9.7-29 on distillation runs).
+    # multiple workers are safe here: h5py handles are opened and closed inside __getitem__
+    # and never stored on self; numpy's global rng is seeded per worker by pytorch's
+    # _worker_loop, so no worker_init_fn is needed.
+    # env overrides exist for sweeps; the defaults are what measured best.
+    num_workers = int(os.environ.get("ACT_NUM_WORKERS", 4))
+    prefetch_factor = int(os.environ.get("ACT_PREFETCH_FACTOR", 2))
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=batch_size_train,
         shuffle=True,
         pin_memory=True,
-        num_workers=1,
-        prefetch_factor=1,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=True,
     )
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=batch_size_val,
         shuffle=True,
         pin_memory=True,
-        num_workers=1,
-        prefetch_factor=1,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=True,
     )
 
     return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim

@@ -40,6 +40,17 @@ def _resolve_policy_ckpt_path(ckpt_dir, ckpt_name=None):
     return os.path.join(ckpt_dir, ckpt_name)
 
 
+def _backbone_norm_stats(model):
+    """read normalization stats off the backbone itself.
+
+    backbones[0] is Joiner(nn.Sequential(backbone, position_embedding)); [0] is the backbone.
+    fail loudly if a backbone declares no norm_mean -- silently assuming imagenet stats
+    is what scaled vit inputs by 2.2x before.
+    """
+    bb = model.backbones[0][0]
+    return list(bb.norm_mean), list(bb.norm_std)
+
+
 def _unwrap_checkpoint_state_dict(checkpoint):
     if isinstance(checkpoint, dict):
         for key in ("model_state_dict", "state_dict"):
@@ -58,37 +69,63 @@ class ACTPolicy(nn.Module):
         self.kl_weight = args_override.get("kl_weight", 10.0)
         print(f"KL Weight {self.kl_weight}")
 
+        # per-backbone normalization; no longer hardcodes imagenet for every backbone
+        # transforms.Normalize has an empty state_dict, so keeping it as an attribute
+        # does not break strict load_state_dict
+        _nm, _ns = _backbone_norm_stats(model)
+        self.normalize = transforms.Normalize(mean=_nm, std=_ns)
+        print(f"[normalize] backbone norm mean={_nm} std={_ns}")
+        
         self.use_distillation = args_override.get("use_distillation", False)
         if self.use_distillation:
-            self.distill_weight = args_override.get("distill_weight", 1.0)
+        #     device = args_override.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        #     backbone_channels = self.model.backbones[0].num_channels
+            
+            # Project student feature to match UNet up4 feature dim (32)
+            # in_channels = backbone_channels
+            # out_channels = 64
+            
+            # self.distill_proj = nn.Sequential(
+            #     nn.Conv2d(in_channels, 2 * in_channels, kernel_size=1, bias=True),
+            #     nn.BatchNorm2d(2 * in_channels),
+            #     nn.SiLU(inplace=True),
+            #     nn.Conv2d(2 * in_channels, out_channels, kernel_size=1, bias=True),
+            # )
+            # self.distill_proj.to(device)
+
+            # # Add to optimizer
+            # self.optimizer.add_param_group({
+            #     'params': self.distill_proj.parameters(),
+            #     'lr': 5e-5
+            # })
+            self.distill_weight = args_override.get("distill_weight", 1)
 
     def __call__(self, qpos, image, actions=None, is_pad=None):
         env_state = None
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        image = normalize(image)
+        image = self.normalize(image)
         if actions is not None:  # training time
             actions = actions[:, :self.model.num_queries]
             is_pad = is_pad[:, :self.model.num_queries]
-
+            
             a_hat, is_pad_hat, (mu, logvar), all_cam_features_orig = self.model(qpos, image, env_state, actions, is_pad)
 
             loss_dict = dict()
             total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
-
+            
             all_l1 = F.l1_loss(actions, a_hat, reduction="none")
             l1 = (all_l1 * ~is_pad.unsqueeze(-1)).mean()
             loss_dict["l1"] = l1
             loss_dict["kl"] = total_kld[0]
-
+            
             if self.use_distillation and all_cam_features_orig is not None:
-                # English (B, num_cams, C, H', W') English,English
-                # all_cam_features_orig English,English num_cams English (B, C, H', W') English
+                # keep (B, num_cams, C, H', W'); do not concat along channels
+                # all_cam_features_orig is a list of num_cams tensors (B, C, H', W')
                 s_feat = torch.stack(all_cam_features_orig, dim=1) # (B, num_cams, C, H', W')
                 loss_dict["s_feat"] = s_feat
                 loss_dict["loss"] = loss_dict["l1"] + loss_dict["kl"] * self.kl_weight
             else:
                 loss_dict["loss"] = loss_dict["l1"] + loss_dict["kl"] * self.kl_weight
-
+                
             return loss_dict
         else:  # inference time
             a_hat, _, (_, _), _ = self.model(qpos, image, env_state)  # no action, sample from prior
@@ -105,11 +142,12 @@ class CNNMLPPolicy(nn.Module):
         model, optimizer = build_CNNMLP_model_and_optimizer(args_override)
         self.model = model  # decoder
         self.optimizer = optimizer
+        _nm, _ns = _backbone_norm_stats(model)
+        self.normalize = transforms.Normalize(mean=_nm, std=_ns)
 
     def __call__(self, qpos, image, actions=None, is_pad=None):
         env_state = None  # TODO
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        image = normalize(image)
+        image = self.normalize(image)
         if actions is not None:  # training time
             actions = actions[:, 0]
             a_hat = self.model(qpos, image, env_state, actions)

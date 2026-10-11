@@ -1,0 +1,27 @@
+# SGSD method dependencies.
+#
+# The simulator, tasks and assets come from RoboTwin — install it first and use
+# its environment (script/_install.sh). What follows is only what this method
+# adds on top; RoboTwin's own dependencies (sapien, pytorch3d, open3d, trimesh,
+# transforms3d) are not duplicated here.
+#
+# Verified on: Python 3.10, CUDA 12.1, torch 2.4.1+cu121, RTX 4090 (sm_89).
+
+torch>=2.1
+torchvision>=0.16
+timm>=0.9.12          # pretrained DINOv2 / ViT / CLIP backbones
+numpy>=1.24
+opencv-python>=4.8
+h5py>=3.9             # episode and segmentation storage
+einops>=0.7
+tqdm>=4.65
+PyYAML>=6.0
+matplotlib>=3.7
+Pillow>=10.0
+
+# Diffusion Policy only
+diffusers>=0.25
+hydra-core>=1.3
+omegaconf>=2.3
+dill>=0.3.7
+zarr>=2.16

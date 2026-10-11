@@ -1,8 +1,112 @@
 {
     "sim-beat_block_hammer-demo_clean-50": {
         "dataset_dir": "./processed_data/sim-beat_block_hammer/demo_clean-50",
-        "num_episodes": 116,
-        "episode_len": 116,
-        "camera_names": ["cam_high", "cam_right_wrist", "cam_left_wrist"]
+        "num_episodes": 47,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-pick_dual_bottles-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-pick_dual_bottles/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-open_laptop-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-open_laptop/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-beat_block_hammer-demo_clutter-50": {
+        "dataset_dir": "./processed_data/sim-beat_block_hammer/demo_clutter-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-place_container_plate-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-place_container_plate/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-click_bell-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-click_bell/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-place_object_stand-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-place_object_stand/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-stack_blocks_two-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-stack_blocks_two/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-move_playingcard_away-demo_clean-50": {
+        "dataset_dir": "./processed_data/sim-move_playingcard_away/demo_clean-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-pick_dual_bottles-demo_distractor-50": {
+        "dataset_dir": "./processed_data/sim-pick_dual_bottles/demo_distractor-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-beat_block_hammer-demo_distractor-50": {
+        "dataset_dir": "./processed_data/sim-beat_block_hammer/demo_distractor-50",
+        "num_episodes": 50,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
     }
 }

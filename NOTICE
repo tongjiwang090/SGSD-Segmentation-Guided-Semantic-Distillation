@@ -1,0 +1,93 @@
+SGSD — Segmentation-Guided Semantic Distillation
+Copyright 2026 The SGSD Authors
+
+This product includes software developed as modifications to third-party
+projects. Each file below is a modified copy of an upstream file; the
+modifications are confined to the points listed and are released under the
+Apache License, Version 2.0 (see LICENSE).
+
+Files that are not modified by this work are NOT redistributed here. Obtain
+them from RoboTwin and apply this repository as an overlay (see README).
+
+--------------------------------------------------------------------------
+RoboTwin
+    https://github.com/RoboTwin-Platform/RoboTwin
+    Provides the simulator, tasks, assets, data collection and the ACT / DP
+    policy trees. Every path in this repository mirrors a RoboTwin path.
+
+Modified files and the scope of each change:
+
+    policy/ACT/imitate_episodes.py
+        adds the three distillation terms (compute_distillation_loss),
+        multi-site loss accumulation, teacher loading and the forward hook
+        that exposes the supervised block. training loop otherwise unchanged.
+
+    policy/ACT/detr/models/backbone.py
+        adds the trainable-visual-set selector (unfreeze_blocks), timm ViT
+        backbones with configurable patch grids, and an optional readout
+        pooling switch. resnet path unchanged.
+
+    policy/ACT/detr/main.py
+        adds two arguments: --backbone_type, --backbone_image_size.
+
+    policy/ACT/act_policy.py
+        removes the auxiliary learned distillation projection.
+
+    policy/ACT/constants.py
+        reads task definitions from SIM_TASK_CONFIGS.json.
+
+    policy/ACT/utils.py, process_data.py
+        carries ground-truth segmentation through the episode pipeline.
+
+    policy/ACT/eval.sh, run_distill_arm.sh, run_freeze_ablation.sh,
+    run_eval_arm.sh
+        arm selection, task-config threading, checkpoint naming.
+
+    policy/DP/diffusion_policy/model/vision/dp_vit.py
+        ViT visual encoder for Diffusion Policy.
+
+    policy/DP/diffusion_policy/model/vision/dp_distill.py
+        the same distillation objective for Diffusion Policy. new file.
+
+    policy/DP/diffusion_policy/workspace/robotworkspace.py
+        wires the distillation loss into the DP training workspace.
+
+    policy/DP/diffusion_policy/model/common/lr_scheduler.py
+        schedule adjustment for the distillation run.
+
+    policy/DP/diffusion_policy/config/robot_dp_vit_14.yaml
+        config for the ViT-backbone DP runs.
+
+    envs/camera/camera.py
+        records per-actor and per-mesh segmentation alongside RGB.
+
+    Segmentation/
+        the teacher. unet.py is an Attention U-Net; dataset.py, train.py,
+        evaluate.py and extract_data.py are written for this work.
+
+--------------------------------------------------------------------------
+DETR
+    https://github.com/facebookresearch/detr
+    Copyright (c) Facebook, Inc. and its affiliates.
+    Licensed under the Apache License, Version 2.0.
+
+    policy/ACT/detr/ descends from DETR by way of ACT, which rebuilt it as a
+    CVAE. The two files retained here (main.py, models/backbone.py) therefore
+    carry Facebook's copyright notice; the remaining DETR modules are
+    unmodified by this work and are not redistributed.
+
+--------------------------------------------------------------------------
+ACT — Action Chunking with Transformers
+    https://github.com/tonyzhaozh/act
+    Zhao et al., Learning Fine-Grained Bimanual Manipulation with Low-Cost
+    Hardware, RSS 2023. Licensed under the MIT License.
+
+    policy/ACT/ descends from ACT as vendored by RoboTwin.
+
+--------------------------------------------------------------------------
+Diffusion Policy
+    https://github.com/real-stanford/diffusion_policy
+    Chi et al., Diffusion Policy: Visuomotor Policy Learning via Action
+    Diffusion, RSS 2023. Licensed under the MIT License.
+
+    policy/DP/ descends from Diffusion Policy as vendored by RoboTwin.

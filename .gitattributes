@@ -1,0 +1,15 @@
+# force lf in the repository regardless of the checkout platform.
+# shell scripts with crlf fail on linux with "bad interpreter".
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+
+*.pth  binary
+*.ckpt binary
+*.png  binary
+*.pdf  binary
