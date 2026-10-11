@@ -1,4 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Modified by the SGSD authors: adds the --backbone_type and
+# --backbone_image_size arguments. Licensed under the Apache License 2.0;
+# see policy/ACT/detr/LICENSE.
 import argparse
 from pathlib import Path
 

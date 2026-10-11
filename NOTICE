@@ -2,9 +2,13 @@ SGSD — Segmentation-Guided Semantic Distillation
 Copyright 2026 The SGSD Authors
 
 This product includes software developed as modifications to third-party
-projects. Each file below is a modified copy of an upstream file; the
-modifications are confined to the points listed and are released under the
-Apache License, Version 2.0 (see LICENSE).
+projects. Each file below is a modified copy of an upstream file, and the
+modifications are confined to the points listed.
+
+Licensing follows the upstream projects. Everything here is MIT (see LICENSE),
+except policy/ACT/detr/, which descends from DETR and remains under the Apache
+License, Version 2.0 (see policy/ACT/detr/LICENSE). RoboTwin, ACT and Diffusion
+Policy are MIT.
 
 Files that are not modified by this work are NOT redistributed here. Obtain
 them from RoboTwin and apply this repository as an overlay (see README).

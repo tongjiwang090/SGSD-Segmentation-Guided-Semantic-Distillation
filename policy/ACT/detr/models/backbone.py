@@ -1,4 +1,8 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Modified by the SGSD authors: adds timm ViT backbones with configurable
+# patch grids, the trainable-visual-set selector and an optional readout
+# pooling switch. Licensed under the Apache License 2.0; see
+# policy/ACT/detr/LICENSE.
 """Backbone modules."""
 from collections import OrderedDict
 import math

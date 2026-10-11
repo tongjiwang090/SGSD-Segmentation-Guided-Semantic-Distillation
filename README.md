@@ -312,6 +312,10 @@ licenses of RoboTwin, ACT, DETR, and their dependencies when redistributing this
 
 ## License
 
-Apache License 2.0; see `LICENSE`. `NOTICE` lists the upstream projects each modified
-file derives from and the scope of every change. Files under `policy/ACT/detr/` retain
-Facebook's original copyright notices.
+MIT; see `LICENSE`. This matches RoboTwin, ACT and Diffusion Policy, the projects this
+work extends.
+
+`policy/ACT/detr/` is the exception: it derives from DETR and stays under the Apache
+License 2.0, with Facebook's copyright notices and `policy/ACT/detr/LICENSE` retained.
+`NOTICE` lists which upstream project each modified file comes from and the scope of
+every change.
