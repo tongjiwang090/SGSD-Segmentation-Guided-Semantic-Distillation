@@ -281,33 +281,6 @@ cp -r /path/to/SGSD/{Segmentation,policy,envs} .
 cp -r /path/to/SGSD/sgsd .
 ```
 
-Paths are identical to RoboTwin's, so no import needs editing. Files replaced by the
-overlay, and what each one changes:
-
-| Path | Change |
-|---|---|
-| `Segmentation/` | the teacher; written for this work |
-| `policy/ACT/imitate_episodes.py` | the three distillation terms, teacher loading, the forward hook exposing the supervised block |
-| `policy/ACT/detr/models/backbone.py` | trainable-visual-set selector, timm ViT backbones, optional readout pooling |
-| `policy/ACT/detr/main.py` | adds `--backbone_type` and `--backbone_image_size` |
-| `policy/ACT/act_policy.py` | removes the auxiliary learned distillation projection |
-| `policy/ACT/deploy_policy.py`, `__init__.py` | RoboTwin's policy entry point; routes the backbone configuration into the evaluated model |
-| `policy/ACT/constants.py`, `utils.py` | task definitions from JSON; segmentation carried through the episode pipeline |
-| `policy/DP/diffusion_policy/` | the same objective for Diffusion Policy |
-| `envs/camera/camera.py` | records per-actor and per-mesh segmentation alongside RGB |
-
-Two environment switches matter and fail silently if lost:
-
-- **`ACT_TASK_CFG`** (`run_distill_arm.sh`, `run_freeze_ablation.sh`).
-  Without it the scripts fall back to `demo_clean`, so a non-clean experiment trains and
-  evaluates on clean data and reports plausible but wrong numbers.
-- **`TEACHER_SEG_MODE`** (`Segmentation/dataset.py`) selects the mask convention
-  (`all` / `target`). Unset, behaviour is pixel-identical to the original.
-
-`dataset.py` also fixes an ordering defect in the original: the mask was cast with
-`astype(np.uint8)` before resizing, so actor ids above 255 wrapped (260 selected an
-unrelated actor, 256 dropped out of the foreground). It now binarizes first.
-
 ## Citation
 
 If you use this code, please cite the repository and the accompanying paper. The paper is
