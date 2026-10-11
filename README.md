@@ -71,6 +71,7 @@ policy/ACT/
   act_policy.py        ACT policy wrapper, auxiliary distillation projection removed
   constants.py         task definitions, read from SIM_TASK_CONFIGS.json
   utils.py             episode dataset, carries ground-truth segmentation
+  deploy_policy.py     RoboTwin policy entry point: get_model / eval / reset_model
   detr/models/backbone.py  mount point and trainable-visual-set selection
   detr/main.py         adds --backbone_type and --backbone_image_size
   run_distill_arm.sh   distilled arm
@@ -212,8 +213,12 @@ Ablations:
 
 Moving the mount point requires moving `--unfreeze` with it. The supervised block must
 be trainable or no gradient reaches the loss, and the run completes without ever
-optimizing the distillation objective. Every mount-point run reported in the paper
-pairs the two, down to the two-point variant (`--mount-block 5 11 --unfreeze b5,b11`).
+optimizing the distillation objective.
+
+`--mount-block` also takes several blocks (`--mount-block 5 11 --unfreeze b5,b11`). That
+is the appendix placement ablation, not the method: two-point supervision matches
+single-point success while degrading pretrained features considerably more, which is why
+the method supervises `b11` alone.
 
 If the teacher checkpoint is missing, the training code builds a randomly initialized
 teacher and prints a warning. That path exists for smoke testing only; do not use it for
@@ -230,8 +235,8 @@ This wraps `policy/ACT/run_eval_arm.sh`, which changes to the RoboTwin root and 
 `script/eval_policy.py`. The deployment adapter in `policy/ACT/deploy_policy.py` converts
 RoboTwin observations into ACT tensors and denormalizes predicted actions.
 
-`--task-config` must match the configuration the policy was trained on. A policy trained
-on `demo_clean` and evaluated under `demo_distractor` measures something else.
+`--task-config` must match the configuration the policy was trained on. Evaluating a
+policy under a configuration it was not trained on measures something else.
 
 ## Checkpoints
 
@@ -272,7 +277,7 @@ demonstrations.
 git clone https://github.com/RoboTwin-Platform/RoboTwin.git
 cd RoboTwin && bash script/_install.sh
 
-cp -r /path/to/SGSD/{Segmentation,policy,task_config,envs} .
+cp -r /path/to/SGSD/{Segmentation,policy,envs} .
 cp -r /path/to/SGSD/sgsd .
 ```
 
@@ -286,13 +291,14 @@ overlay, and what each one changes:
 | `policy/ACT/detr/models/backbone.py` | trainable-visual-set selector, timm ViT backbones, optional readout pooling |
 | `policy/ACT/detr/main.py` | adds `--backbone_type` and `--backbone_image_size` |
 | `policy/ACT/act_policy.py` | removes the auxiliary learned distillation projection |
+| `policy/ACT/deploy_policy.py`, `__init__.py` | RoboTwin's policy entry point; routes the backbone configuration into the evaluated model |
 | `policy/ACT/constants.py`, `utils.py` | task definitions from JSON; segmentation carried through the episode pipeline |
 | `policy/DP/diffusion_policy/` | the same objective for Diffusion Policy |
 | `envs/camera/camera.py` | records per-actor and per-mesh segmentation alongside RGB |
 
 Two environment switches matter and fail silently if lost:
 
-- **`ACT_TASK_CFG`** (`mt_arms.sh`, `run_distill_arm.sh`, `run_freeze_ablation.sh`).
+- **`ACT_TASK_CFG`** (`run_distill_arm.sh`, `run_freeze_ablation.sh`).
   Without it the scripts fall back to `demo_clean`, so a non-clean experiment trains and
   evaluates on clean data and reports plausible but wrong numbers.
 - **`TEACHER_SEG_MODE`** (`Segmentation/dataset.py`) selects the mask convention

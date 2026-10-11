@@ -36,6 +36,11 @@ Modified files and the scope of each change:
     policy/ACT/constants.py
         reads task definitions from SIM_TASK_CONFIGS.json.
 
+    policy/ACT/deploy_policy.py, __init__.py
+        routes the backbone configuration into the model RoboTwin evaluates;
+        the RoboTwin-side interface (get_model / eval / reset_model) is
+        unchanged.
+
     policy/ACT/utils.py, process_data.py
         carries ground-truth segmentation through the episode pipeline.
 
